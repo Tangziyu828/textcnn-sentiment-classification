@@ -7,8 +7,11 @@ from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 from torchtext.vocab import build_vocab_from_iterator
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 import jieba
+
+from model.textcnn import TextCNN
+from utils.dataset_utils import TextDataset
 
 print("🔍 [阶段1] 正在加载数据...")
 df = pd.read_csv("情感评论数据集_sample.csv", encoding="utf-8-sig")
@@ -24,56 +27,16 @@ vocab = build_vocab_from_iterator(yield_tokens(df["tokens"]), specials=["<pad>",
 vocab.set_default_index(vocab["<unk>"])
 
 MAX_LEN = 30
-def encode(tokens):
-    ids = vocab(tokens)
-    if len(ids) < MAX_LEN:
-        ids += [vocab["<pad>"]] * (MAX_LEN - len(ids))
-    else:
-        ids = ids[:MAX_LEN]
-    return ids
-
-df["input_ids"] = df["tokens"].apply(encode)
-
-# 构建 Dataset
-class TextDataset(torch.utils.data.Dataset):
-    def __init__(self, X, y):
-        self.X = X
-        self.y = y
-    def __len__(self):
-        return len(self.X)
-    def __getitem__(self, idx):
-        return torch.tensor(self.X[idx]), torch.tensor(self.y[idx])
+df["input_ids"] = df["tokens"].apply(lambda x: vocab(x)[:MAX_LEN] + [vocab["<pad>"]] * max(0, MAX_LEN - len(x)))
 
 print("🔍 [阶段3] 划分训练测试集...")
 X_train, X_test, y_train, y_test = train_test_split(df["input_ids"].tolist(), df["label"].tolist(), test_size=0.2, random_state=42)
 train_dataset = TextDataset(X_train, y_train)
 test_dataset = TextDataset(X_test, y_test)
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=True)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8)
+train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=8)
 
 print(f"✅ 训练样本数: {len(train_dataset)}, 测试样本数: {len(test_dataset)}")
-
-class TextCNN(nn.Module):
-    def __init__(self, vocab_size, embed_dim, num_classes):
-        super(TextCNN, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.conv1 = nn.Conv2d(1, 100, (3, embed_dim))
-        self.conv2 = nn.Conv2d(1, 100, (4, embed_dim))
-        self.conv3 = nn.Conv2d(1, 100, (5, embed_dim))
-        self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(3 * 100, num_classes)
-
-    def forward(self, x):
-        x = self.embedding(x).unsqueeze(1)
-        x1 = torch.relu(self.conv1(x)).squeeze(3)
-        x1 = torch.max_pool1d(x1, x1.size(2)).squeeze(2)
-        x2 = torch.relu(self.conv2(x)).squeeze(3)
-        x2 = torch.max_pool1d(x2, x2.size(2)).squeeze(2)
-        x3 = torch.relu(self.conv3(x)).squeeze(3)
-        x3 = torch.max_pool1d(x3, x3.size(2)).squeeze(2)
-        x = torch.cat((x1, x2, x3), dim=1)
-        x = self.dropout(x)
-        return self.fc(x)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = TextCNN(len(vocab), 100, 3).to(device)
