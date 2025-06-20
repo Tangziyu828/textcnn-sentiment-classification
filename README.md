@@ -19,3 +19,18 @@
 
 ```bash
 pip install -r requirements.txt
+
+
+## 📁 项目结构
+AIProject/
+├── data/                       # 存放评论数据集
+│   └── text_data.csv
+├── model/                      # 模型结构
+│   └── textcnn.py
+├── utils/                      # 工具模块
+│   └── dataset_utils.py
+├── train_textcnn_clean.py     # 主训练脚本
+├── data_analysis.py           # 可视化脚本
+├── result/                     # 输出模型和图表
+├── README.md                  # 项目说明文档
+
